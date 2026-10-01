@@ -5,3 +5,7 @@ dist/
 !.env.example
 *.log
 .DS_Store
+
+# Kept locally, not published: the planning doc and the saved operator queries.
+PLAN.md
+queries.sql

@@ -2,7 +2,7 @@
 
 Receives tracking events from [`@momotoldr/tracker`](https://github.com/momotoldr/momoto-tracker)
 and stores them in **its own Postgres**. There is no dashboard: events are read with SQL in
-Railway, usually one visit at a time (`queries.sql`).
+Railway, usually one visit at a time.
 
 Nothing in the product depends on it. The tracker never blocks and keeps (then retries)
 what it couldn't send, so this service being down costs data, never a broken page.
@@ -30,7 +30,7 @@ Delivery from the tracker is at-least-once. `event_id` (a UUIDv7) is the primary
 inserts skip duplicates, so a resent batch is stored once.
 
 **Adding an event to the frontend means adding its name to `src/allowlist.ts` too.**
-Otherwise it is silently dropped (watch `rejected`, query 8).
+Otherwise it is silently dropped — watch `analytics_session.rejected`.
 
 ## Data
 
@@ -56,7 +56,7 @@ ALTER ROLE analytics_ro WITH LOGIN PASSWORD '<generate one>';
 ```
 
 Keep the resulting URL as `READONLY_DATABASE_URL` on the database service in Railway. Then
-paste from [`queries.sql`](queries.sql). The main query is "one visit, in order":
+query. The main query is "one visit, in order":
 
 ```sql
 SELECT ts, name, props FROM analytics_event WHERE session_id = '<id>' ORDER BY ts;

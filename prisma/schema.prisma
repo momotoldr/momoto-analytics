@@ -2,7 +2,7 @@
 //
 // Tables and columns are snake_case in Postgres (`@@map` / `@map`) because they are
 // queried by hand in the Railway console; quoted camelCase identifiers there are a tax
-// on every query. See queries.sql.
+// on every query.
 //
 // Sizing (measured 2026-09-29, 1 M synthetic events): ~278 bytes per event with this
 // layout — context lives once per visit, ids are uuid, and the only btree on events
