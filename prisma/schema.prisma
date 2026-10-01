@@ -1,0 +1,83 @@
+// momoto-analytics — its own database, never momoto-core's.
+//
+// Tables and columns are snake_case in Postgres (`@@map` / `@map`) because they are
+// queried by hand in the Railway console; quoted camelCase identifiers there are a tax
+// on every query. See queries.sql.
+//
+// Sizing (measured 2026-09-29, 1 M synthetic events): ~278 bytes per event with this
+// layout — context lives once per visit, ids are uuid, and the only btree on events
+// is (session_id, ts).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// One row per visit (the tracker's `session_id`). Everything constant for the visit
+/// lives here rather than on every event.
+model AnalyticsSession {
+  sessionId String   @id @map("session_id") @db.Uuid
+  /// The browser (`anon_id`). Joins to `analytics_identity` to reach an account.
+  anonId    String   @map("anon_id") @db.Uuid
+  /// Earliest event time seen for the visit.
+  startedAt DateTime @map("started_at") @db.Timestamptz(3)
+  /// Sending app, e.g. `momoto-fe`.
+  source    String
+  /// Per-batch context from the first batch: app version, flags, viewport, language…
+  context   Json
+  /// /24 (IPv4) or /48 (IPv6) — enough to spot abuse, not to find a person.
+  ipPrefix  String?  @map("ip_prefix")
+  /// Events the client evicted from a full queue (sum of the envelopes' `dropped`).
+  dropped   Int      @default(0)
+  /// Events this server refused: unknown name, bad id, non-scalar props.
+  rejected  Int      @default(0)
+
+  @@index([anonId])
+  @@index([startedAt])
+  @@map("analytics_session")
+}
+
+model AnalyticsEvent {
+  /// UUIDv7 from the tracker. Time-ordered, so this primary key only ever appends — and
+  /// it is the dedupe key: retries, reload restores and close-time beacons all resend.
+  eventId   String   @id @map("event_id") @db.Uuid
+  sessionId String   @map("session_id") @db.Uuid
+  name      String
+  /// Client time, corrected for clock skew with the envelope's `sent_at`.
+  ts        DateTime @db.Timestamptz(3)
+  /// `PAGE` / `COMPONENT` / null, from the tracker's classification.
+  type      String?
+  props     Json
+
+  /// The main query: one visit, in order.
+  @@index([sessionId, ts])
+  /// Date-range scans ("errors in the last day", the purge). BRIN: kilobytes, not the
+  /// tens of megabytes a btree on ts would take, and enough for an append-only table.
+  @@index([ts], type: Brin)
+  @@map("analytics_event")
+}
+
+/// Links a browser to an account. Written only by an authenticated identify call, so a
+/// user id never arrives in a public, forgeable event body.
+model AnalyticsIdentity {
+  anonId     String   @id @map("anon_id") @db.Uuid
+  /// momoto-core's user id. No foreign key: that table lives in another database.
+  userId     String   @map("user_id")
+  lastSeenAt DateTime @map("last_seen_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("analytics_identity")
+}
+
+/// Once-a-day jobs claim their day here with a conditional UPDATE, so two instances
+/// (Railway overlaps them during a deploy) never both run a purge.
+model AnalyticsJob {
+  name      String   @id
+  lastRunOn DateTime @map("last_run_on") @db.Date
+
+  @@map("analytics_job")
+}
