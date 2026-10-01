@@ -22,27 +22,40 @@ import { logger } from './logger.js'
 export function clientIp(req: Request, header: string | null): string | undefined {
   const value = header ? req.get(header)?.split(',')[0]?.trim() : undefined
   const fromHeader = !!value && isIP(value) !== 0
-  reportSourceOnce(req, header, fromHeader)
+  reportSource(req, header, fromHeader)
   return fromHeader ? value : req.ip
 }
 
-let reported = false
+/** How many requests per process get the diagnostic line below. */
+const REPORT_FIRST = 5
+let reported = 0
 
 /**
- * Once per process: which address source the first request actually used, and which
- * proxy headers arrived — names and presence only, never an address. Behind a CDN this is
- * the one place a misconfigured header shows (the fallback is silent otherwise).
+ * For the first few requests of each process: which address source was used, and which
+ * proxy headers arrived — names, positions and booleans only, never an address. Behind a
+ * CDN this is the one place a misconfigured header shows (the fallback is silent
+ * otherwise), and the hop counts below are what other services' `TRUST_PROXY` relies on.
  */
-function reportSourceOnce(req: Request, header: string | null, fromHeader: boolean): void {
-  if (reported) return
-  reported = true
-  const forwardedFor = req.get('x-forwarded-for')
+function reportSource(req: Request, header: string | null, fromHeader: boolean): void {
+  if (reported >= REPORT_FIRST) return
+  reported += 1
+  const forwarded = (req.get('x-forwarded-for') ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+  const visitor = header ? req.get(header)?.split(',')[0]?.trim() : undefined
   logger.info('client_ip.source', {
     configuredHeader: header,
     used: fromHeader ? 'header' : 'req.ip',
     present: ['cf-connecting-ip', 'true-client-ip', 'x-real-ip', 'x-forwarded-for'].filter(
       (name) => req.get(name) !== undefined,
     ),
-    forwardedForEntries: forwardedFor ? forwardedFor.split(',').length : 0,
+    forwardedForEntries: forwarded.length,
+    // Where the visitor's address sits in X-Forwarded-For (-1: absent), and whether a
+    // `trust proxy` hop count of 1 or 2 would have picked it — Express takes the entry
+    // `hops` from the right. Positions and booleans only; no address is logged.
+    visitorAt: visitor ? forwarded.indexOf(visitor) : -1,
+    trust1PicksVisitor: !!visitor && forwarded[forwarded.length - 1] === visitor,
+    trust2PicksVisitor: !!visitor && forwarded[forwarded.length - 2] === visitor,
   })
 }
