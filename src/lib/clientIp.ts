@@ -2,6 +2,8 @@ import { isIP } from 'node:net'
 
 import type { Request } from 'express'
 
+import { logger } from './logger.js'
+
 /**
  * The visitor's address — for the per-IP rate limits and the stored `/24` prefix.
  *
@@ -18,9 +20,29 @@ import type { Request } from 'express'
  * falls back to `req.ip`.
  */
 export function clientIp(req: Request, header: string | null): string | undefined {
-  if (header) {
-    const value = req.get(header)?.split(',')[0]?.trim()
-    if (value && isIP(value)) return value
-  }
-  return req.ip
+  const value = header ? req.get(header)?.split(',')[0]?.trim() : undefined
+  const fromHeader = !!value && isIP(value) !== 0
+  reportSourceOnce(req, header, fromHeader)
+  return fromHeader ? value : req.ip
+}
+
+let reported = false
+
+/**
+ * Once per process: which address source the first request actually used, and which
+ * proxy headers arrived — names and presence only, never an address. Behind a CDN this is
+ * the one place a misconfigured header shows (the fallback is silent otherwise).
+ */
+function reportSourceOnce(req: Request, header: string | null, fromHeader: boolean): void {
+  if (reported) return
+  reported = true
+  const forwardedFor = req.get('x-forwarded-for')
+  logger.info('client_ip.source', {
+    configuredHeader: header,
+    used: fromHeader ? 'header' : 'req.ip',
+    present: ['cf-connecting-ip', 'true-client-ip', 'x-real-ip', 'x-forwarded-for'].filter(
+      (name) => req.get(name) !== undefined,
+    ),
+    forwardedForEntries: forwardedFor ? forwardedFor.split(',').length : 0,
+  })
 }

@@ -36,6 +36,8 @@ httpServer.listen(env.port, () => {
     port: env.port,
     corsOrigins: env.corsOrigins,
     retentionDays: env.retentionDays,
+    clientIpHeader: env.clientIpHeader,
+    trustProxy: env.trustProxy,
   })
 })
 
