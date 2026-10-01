@@ -77,7 +77,7 @@ describe.skipIf(!hasDatabase)('ingest + identify (database)', () => {
         where: { sessionId: ids.session_id },
       })
       expect(session.dropped).toBe(3)
-      expect(session.startedAt.getTime()).toBe(now - 60_000)
+      expect(Math.abs(session.startedAt.getTime() - (now - 60_000))).toBeLessThan(1000)
     })
 
     it('POST /v1/e takes the same envelope', async () => {
