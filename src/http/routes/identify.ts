@@ -3,6 +3,7 @@ import express, { Router, type RequestHandler } from 'express'
 import { verifyAccessToken } from '../../auth/verifyAccessToken.js'
 import { env } from '../../config/env.js'
 import { prisma } from '../../db/client.js'
+import { clientIp } from '../../lib/clientIp.js'
 import { logger } from '../../lib/logger.js'
 import { RateLimiter } from '../../lib/rateLimiter.js'
 import { asyncRoute } from '../asyncRoute.js'
@@ -17,7 +18,7 @@ export function sweepIdentifyLimits(now: number = Date.now()): number {
 }
 
 const rateLimit: RequestHandler = (req, res, next) => {
-  const key = req.ip ?? 'unknown'
+  const key = clientIp(req, env.clientIpHeader) ?? 'unknown'
   if (limiter.allow(key)) return next()
   res.set('Retry-After', String(Math.ceil(limiter.retryAfterMs(key) / 1000)))
   res.status(429).json({ error: 'too_many_requests' })

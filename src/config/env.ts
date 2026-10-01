@@ -11,6 +11,12 @@ export interface Env {
   /** How many reverse-proxy hops sit in front of us (Express `trust proxy`). */
   trustProxy: number
   /**
+   * A header carrying the visitor's address, set by the CDN in front of us — on Railway
+   * behind Cloudflare, `cf-connecting-ip`. Wins over `req.ip`, which there resolves to
+   * Railway's edge rather than the visitor. See `lib/clientIp.ts`.
+   */
+  clientIpHeader: string | null
+  /**
    * Verifies the access tokens `momoto-core` signs, for `/v1/b/identify`. Must be
    * **identical** to core's: a mismatch doesn't fail at boot, identify just answers 401.
    */
@@ -79,6 +85,7 @@ export const env: Env = {
   port: positiveInt('PORT', process.env.PORT, 3004),
   corsOrigins: parseOrigins(process.env.CORS_ORIGINS),
   trustProxy: nonNegativeInt('TRUST_PROXY', process.env.TRUST_PROXY, 0),
+  clientIpHeader: process.env.CLIENT_IP_HEADER?.trim().toLowerCase() || null,
   jwtSecret: requiredSecret('JWT_SECRET', process.env.JWT_SECRET),
   retentionDays: positiveInt('RETENTION_DAYS', process.env.RETENTION_DAYS, 90),
   ingestRateLimit: positiveInt('INGEST_RATE_LIMIT', process.env.INGEST_RATE_LIMIT, 600),

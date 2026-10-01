@@ -5,6 +5,7 @@ import express, { Router } from 'express'
 import { env } from '../../config/env.js'
 import { parseEnvelope } from '../../ingest/envelope.js'
 import { storeBatch } from '../../ingest/store.js'
+import { clientIp } from '../../lib/clientIp.js'
 import { ipPrefix } from '../../lib/ipPrefix.js'
 import { logger } from '../../lib/logger.js'
 import { RateLimiter } from '../../lib/rateLimiter.js'
@@ -37,7 +38,8 @@ ingestRouter.post(
   ['/b', '/e'],
   body,
   asyncRoute(async (req, res) => {
-    const key = req.ip ?? 'unknown'
+    const ip = clientIp(req, env.clientIpHeader)
+    const key = ip ?? 'unknown'
     if (!limiter.allow(key)) {
       // The tracker honours Retry-After, so a throttled page backs off instead of hammering.
       res.set('Retry-After', String(Math.ceil(limiter.retryAfterMs(key) / 1000)))
@@ -61,7 +63,7 @@ ingestRouter.post(
     const { batch } = parsed
 
     try {
-      await storeBatch(batch, ipPrefix(req.ip))
+      await storeBatch(batch, ipPrefix(ip))
     } catch (err) {
       // Not the client's fault and not permanent: 503 makes the tracker retry, then keep
       // the batch for later. The product itself never notices.

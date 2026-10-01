@@ -79,7 +79,10 @@ npm test                     # needs DATABASE_URL — the suites TRUNCATE its ta
   `npm run db:deploy`; health check `/healthz`.
 - Variables: `DATABASE_URL` (reference to the database, with `?connection_limit=5`),
   `JWT_SECRET` (a **reference to momoto-core's** — set before the first deploy, it
-  resolves at deploy time), `CORS_ORIGINS`, `TRUST_PROXY=1`.
+  resolves at deploy time), `CORS_ORIGINS`, `TRUST_PROXY=1`, and
+  **`CLIENT_IP_HEADER=cf-connecting-ip`** — behind Cloudflare, `req.ip` is Railway's edge,
+  not the visitor. Keep the service on the Cloudflare domain only (no `*.up.railway.app`
+  domain), since a request that skips Cloudflare could forge that header.
 - Domains: `e.momotoldr.com` / `e-staging.momotoldr.com`, deliberately meaningless so
   content blockers don't match them.
 - After deploying: sign in on the frontend and check a row appears in

@@ -54,7 +54,8 @@ export function createApp(): Express {
   const app = express()
 
   // Railway's proxy puts the client in X-Forwarded-For. Without this `req.ip` is the
-  // proxy for everyone, and per-IP limits would throttle all users as one.
+  // proxy for everyone, and per-IP limits would throttle all users as one. Behind
+  // Cloudflare that is still not enough — see `CLIENT_IP_HEADER` / `lib/clientIp.ts`.
   app.set('trust proxy', env.trustProxy)
 
   app.use(
