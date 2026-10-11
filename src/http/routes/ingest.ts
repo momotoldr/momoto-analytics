@@ -5,7 +5,7 @@ import express, { Router } from 'express'
 import { env } from '../../config/env.js'
 import { parseEnvelope } from '../../ingest/envelope.js'
 import { storeBatch } from '../../ingest/store.js'
-import { clientIp } from '../../lib/clientIp.js'
+import { clientIp, rateLimitKey } from '../../lib/clientIp.js'
 import { ipPrefix } from '../../lib/ipPrefix.js'
 import { logger } from '../../lib/logger.js'
 import { RateLimiter } from '../../lib/rateLimiter.js'
@@ -39,7 +39,7 @@ ingestRouter.post(
   body,
   asyncRoute(async (req, res) => {
     const ip = clientIp(req, env.clientIpHeader)
-    const key = ip ?? 'unknown'
+    const key = rateLimitKey(ip)
     if (!limiter.allow(key)) {
       // The tracker honours Retry-After, so a throttled page backs off instead of hammering.
       res.set('Retry-After', String(Math.ceil(limiter.retryAfterMs(key) / 1000)))
