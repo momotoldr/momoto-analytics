@@ -56,6 +56,16 @@ export const EVENT_NAMES = new Set([
   'payment_failed',
   'gallery_viewed',
   'strip_deleted',
+  // Scrapbook
+  'scrapbook_created',
+  'scrapbook_strip_placed',
+  'scrapbook_finished',
+  'scrapbook_finish_failed',
+  'scrapbook_downloaded',
+  // Promos (momoto-fe docs/PLAN-promos.md)
+  'promo_card_shown',
+  'promo_card_clicked',
+  'partner_promo_earned',
   // Health
   'client_error',
   'api_failed',

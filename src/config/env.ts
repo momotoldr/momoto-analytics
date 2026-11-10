@@ -2,6 +2,8 @@
 // other import here, and `src/index.ts` imports it first of all for the same reason.
 import './loadEnv.js'
 
+import { createPublicKey, type KeyObject } from 'node:crypto'
+
 import { logger } from '../lib/logger.js'
 
 export interface Env {
@@ -17,10 +19,16 @@ export interface Env {
    */
   clientIpHeader: string | null
   /**
-   * Verifies the access tokens `momoto-core` signs, for `/v1/b/identify`. Must be
-   * **identical** to core's: a mismatch doesn't fail at boot, identify just answers 401.
+   * Verifies ES256 access tokens, for `/v1/b/identify`. Can't mint one, so a leak here
+   * can't forge a login. At least one of this and `jwtSecret` is required.
    */
-  jwtSecret: string
+  jwtPublicKey: KeyObject | null
+  /**
+   * Verifies HS256 access tokens, and could mint them too. Must be **identical** to core's
+   * while it is set: a mismatch doesn't fail at boot, identify just answers 401. Remove it
+   * once core signs with its private key.
+   */
+  jwtSecret: string | null
   /** Events, visits and identity links older than this are deleted daily. */
   retentionDays: number
   /**
@@ -72,13 +80,32 @@ function nonNegativeInt(name: string, raw: string | undefined, fallback: number)
   return n
 }
 
-/** Require a non-empty secret from the environment (never hardcode secrets). */
-function requiredSecret(name: string, raw: string | undefined): string {
+/**
+ * The P-256 key from `JWT_PUBLIC_KEY`, or null. A PEM (real or `\n`-escaped newlines) or
+ * the same PEM in base64. Copied from momoto-realtime (no shared package between services).
+ */
+function parseJwtPublicKey(raw: string | undefined): KeyObject | null {
   const value = raw?.trim()
-  if (!value) {
-    throw new Error(`Missing ${name}: set it in the environment (see .env.example).`)
+  if (!value) return null
+  const pem = value.includes('-----BEGIN')
+    ? value.replace(/\\n/g, '\n')
+    : Buffer.from(value, 'base64').toString('utf8')
+  let key: KeyObject
+  try {
+    key = createPublicKey(pem)
+  } catch {
+    throw new Error('Invalid JWT_PUBLIC_KEY: not a readable public key.')
   }
-  return value
+  if (key.asymmetricKeyDetails?.namedCurve !== 'prime256v1') {
+    throw new Error('Invalid JWT_PUBLIC_KEY: expected an EC key on the P-256 curve.')
+  }
+  return key
+}
+
+const jwtPublicKey = parseJwtPublicKey(process.env.JWT_PUBLIC_KEY)
+const jwtSecret = process.env.JWT_SECRET?.trim() || null
+if (!jwtPublicKey && !jwtSecret) {
+  throw new Error('Missing JWT_PUBLIC_KEY or JWT_SECRET: set one (see .env.example).')
 }
 
 export const env: Env = {
@@ -86,7 +113,8 @@ export const env: Env = {
   corsOrigins: parseOrigins(process.env.CORS_ORIGINS),
   trustProxy: nonNegativeInt('TRUST_PROXY', process.env.TRUST_PROXY, 0),
   clientIpHeader: process.env.CLIENT_IP_HEADER?.trim().toLowerCase() || null,
-  jwtSecret: requiredSecret('JWT_SECRET', process.env.JWT_SECRET),
+  jwtPublicKey,
+  jwtSecret,
   retentionDays: positiveInt('RETENTION_DAYS', process.env.RETENTION_DAYS, 90),
   ingestRateLimit: positiveInt('INGEST_RATE_LIMIT', process.env.INGEST_RATE_LIMIT, 600),
   identifyRateLimit: positiveInt('IDENTIFY_RATE_LIMIT', process.env.IDENTIFY_RATE_LIMIT, 60),
